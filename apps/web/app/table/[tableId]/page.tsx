@@ -30,8 +30,20 @@ const previewStates: Record<string, Snapshot> = {
   'all-in': { version: 31, phase: 'RIVER', holds: [], presences: [{ userId: 'hero', connected: true, seatNumber: 1 }, { userId: 'villain', connected: true, seatNumber: 2 }, { userId: 'third', connected: true, seatNumber: 3 }], hand: { pot: 180, phase: 'river' }, timer: null },
   showdown: { version: 32, phase: 'SHOWDOWN', holds: [], presences: [{ userId: 'hero', connected: true, seatNumber: 1 }, { userId: 'villain', connected: true, seatNumber: 2 }], hand: { pot: 220, phase: 'showdown' }, timer: null },
   'winner-settled': { version: 33, phase: 'SHOWDOWN', holds: [], presences: [{ userId: 'hero', connected: true, seatNumber: 1 }], hand: { pot: 0, phase: 'hand_complete' }, timer: null },
-  'timeout-warning': { version: 34, phase: 'FLOP', holds: [], presences: [{ userId: 'hero', connected: true, seatNumber: 1 }, { userId: 'villain', connected: true, seatNumber: 2 }], hand: { pot: 24, phase: 'flop' }, timer: { timeoutMs: 20000, warningAt: Date.now() + 2000, timeoutAt: Date.now() + 4000 } },
+  'timeout-warning': { version: 34, phase: 'FLOP', holds: [], presences: [{ userId: 'hero', connected: true, seatNumber: 1 }, { userId: 'villain', connected: true, seatNumber: 2 }], hand: { pot: 24, phase: 'flop' }, timer: { timeoutMs: 20000, warningAt: Date.now() + 2000, timeoutAt: Date.now() + 4000 } }
 };
+
+const seatAnchors = [
+  'left-[10%] top-[65%]',
+  'left-[28%] top-[78%]',
+  'left-[50%] top-[82%]',
+  'left-[72%] top-[78%]',
+  'left-[88%] top-[65%]',
+  'left-[88%] top-[28%]',
+  'left-[72%] top-[12%]',
+  'left-[50%] top-[8%]',
+  'left-[28%] top-[12%]'
+];
 
 export default function TablePage() {
   const params = useParams<{ tableId: string }>();
@@ -53,14 +65,13 @@ export default function TablePage() {
     setWalletId(window.localStorage.getItem('walletId') ?? '');
   }, []);
 
-
-
   useEffect(() => {
     const stored = typeof window === 'undefined' ? [] : JSON.parse(window.localStorage.getItem('activeTables') ?? '[]');
     const next = Array.from(new Set([...(stored as string[]), tableId]));
     setActiveTables(next);
     if (typeof window !== 'undefined') window.localStorage.setItem('activeTables', JSON.stringify(next));
   }, [tableId]);
+
   useEffect(() => {
     if (preview.enabled) {
       setRakeTooltip('Rake 5.00% · Cap 3 · No Flop No Drop');
@@ -73,6 +84,7 @@ export default function TablePage() {
       })
       .catch(() => setRakeTooltip('Rake info unavailable'));
   }, [preview.enabled, tableId]);
+
   useEffect(() => {
     if (!preview.enabled) return;
     const current = previewStates[preview.state] ?? previewStates.default;
@@ -84,10 +96,7 @@ export default function TablePage() {
   }, [preview.enabled, preview.state]);
 
   const socket: Socket | null = useMemo(() => {
-    if (!accessToken || preview.enabled) {
-      return null;
-    }
-
+    if (!accessToken || preview.enabled) return null;
     return io(API_BASE, {
       transports: ['websocket'],
       auth: { token: accessToken },
@@ -103,13 +112,9 @@ export default function TablePage() {
     }
 
     const join = () => {
-      socket.emit(
-        'table:join',
-        { tableId, role: 'PLAYER', reconnectFromVersion: snapshot.version, clientEventId: crypto.randomUUID() },
-        (ack: { ok: boolean; snapshot?: Snapshot }) => {
-          if (ack.snapshot) setSnapshot(ack.snapshot);
-        }
-      );
+      socket.emit('table:join', { tableId, role: 'PLAYER', reconnectFromVersion: snapshot.version, clientEventId: crypto.randomUUID() }, (ack: { ok: boolean; snapshot?: Snapshot }) => {
+        if (ack.snapshot) setSnapshot(ack.snapshot);
+      });
     };
 
     socket.on('connect', () => {
@@ -166,62 +171,90 @@ export default function TablePage() {
 
   return (
     <MobileShell>
-      <header className="mb-2 flex items-center justify-between">
-        <p className="text-xs text-slate-400">Table shell</p>
-        {preview.enabled ? <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-xs text-emerald-300">Preview: {preview.state}</span> : null}
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Table {tableId.slice(0, 8)}</p>
+          <h1 className="text-xl font-semibold">No-Limit Hold'em</h1>
+        </div>
+        {preview.enabled ? <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-1 text-[11px] text-amber-200">Preview mode</span> : null}
       </header>
 
-      {reconnectBannerVisible ? <div className="mb-2 rounded-lg bg-amber-500/20 p-2 text-xs text-amber-200">Reconnecting to table transport...</div> : null}
+      {reconnectBannerVisible ? <div className="mb-3 rounded-lg border border-amber-400/20 bg-amber-500/10 p-2 text-xs text-amber-200">Connection unstable. Re-syncing table stream…</div> : null}
 
-      <section className="mb-2 rounded-xl bg-slate-900 p-2 text-xs">
-        <p className="text-slate-400">Active tables {activeTables.length} · reconnect {socketState === 'connected' ? 'ok' : 'pending'}</p>
-        <div className="mt-1 flex flex-wrap gap-1">
+      <section className="mb-3 rounded-xl border border-slate-700/70 bg-slate-900/70 p-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-slate-300">
+          <span>Phase: {snapshot.phase}</span>
+          <span>•</span>
+          <span>Players: {snapshot.presences.filter((p) => p.connected).length}</span>
+          <span>•</span>
+          <span>Pot: {snapshot.hand?.pot ?? 0}</span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1">
           {activeTables.map((id) => (
-            <a key={id} href={`/table/${id}`} className={`rounded px-2 py-1 ${id === tableId ? 'bg-emerald-500 text-black' : 'bg-slate-800'}`}>
+            <a key={id} href={`/table/${id}`} className={`rounded px-2 py-1 ${id === tableId ? 'bg-emerald-400 text-black' : 'bg-slate-800 text-slate-200'}`}>
               {id.slice(0, 6)}
             </a>
           ))}
         </div>
       </section>
-      <section className="rounded-3xl bg-gradient-to-b from-emerald-950 to-slate-950 p-3 ring-1 ring-emerald-700/30">
-        <div className="aspect-[16/10] rounded-2xl border border-emerald-700/40 p-3 sm:aspect-[21/9]">
-          <p className="text-xs uppercase text-emerald-300">Table #{tableId.slice(0, 8)} · v{snapshot.version}</p>
-          <p className="text-sm">Phase: {snapshot.phase}</p>
-          <p className="mt-1 text-xs text-slate-300" title={rakeTooltip}>ⓘ {rakeTooltip}</p>
-          <p className="mt-1 text-xs text-slate-300">Connected players: {snapshot.presences.filter((p) => p.connected).length}</p>
-          <p className="mt-1 text-xs text-slate-300">Held buy-ins: {snapshot.holds.length}</p>
-          <p className="mt-1 text-xs text-slate-300">Pot: {snapshot.hand?.pot ?? 0}</p>
-          {snapshot.timer?.warningAt && snapshot.timer.warningAt < Date.now() ? <p className="mt-1 text-xs text-amber-300">Action timer warning</p> : null}
-          {deltaMessage ? <p className="mt-2 text-xs text-emerald-300">Wallet delta: {deltaMessage}</p> : null}
+
+      <section className="relative overflow-hidden rounded-[2rem] border border-emerald-700/30 bg-gradient-to-b from-emerald-900/40 to-slate-950 p-3 shadow-2xl">
+        <div className="relative aspect-[16/10] w-full rounded-[1.6rem] border border-emerald-700/40 bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.35),_rgba(6,78,59,0.85)_58%,_rgba(2,6,23,0.95))]">
+          {seatAnchors.map((anchor, i) => {
+            const seat = snapshot.presences.find((p) => p.seatNumber === i + 1);
+            return (
+              <div key={anchor} className={`absolute -translate-x-1/2 -translate-y-1/2 ${anchor}`}>
+                <div className={`w-16 rounded-full border px-2 py-1 text-center text-[10px] ${seat ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100' : 'border-slate-600 bg-slate-900/80 text-slate-400'}`}>
+                  <p>Seat {i + 1}</p>
+                  <p className="truncate">{seat ? seat.userId : 'Open'}</p>
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="absolute left-1/2 top-1/2 w-40 -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-emerald-300/30 bg-slate-900/70 p-3 text-center text-xs">
+            <p className="text-slate-300">Main Pot</p>
+            <p className="text-lg font-semibold text-emerald-200">{snapshot.hand?.pot ?? 0}</p>
+            <p className="mt-1 text-[11px] text-slate-400">{rakeTooltip}</p>
+          </div>
         </div>
       </section>
 
-      <section className="mt-3 rounded-xl bg-slate-900 p-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Buy-in reservation</h2>
-          <button className="rounded-lg bg-slate-800 px-3 py-2 text-xs" onClick={() => setBuyInModalOpen(true)}>Open buy-in</button>
+      <section className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs">
+          <p className="text-slate-400">Buy-in reservation</p>
+          <p className="mt-1 font-semibold">{reservationId ? `Reserved #${reservationId.slice(0, 6)}` : 'No active reservation'}</p>
+          {deltaMessage ? <p className="mt-1 text-emerald-300">Wallet delta: {deltaMessage}</p> : null}
         </div>
-        <p className="mt-2 text-xs text-slate-400">Reserve held funds before seat lock.</p>
-        {reservationId ? <button className="mt-2 w-full rounded-lg bg-slate-800 py-3" onClick={releaseBuyIn}>Release Hold</button> : null}
+        <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs">
+          <p className="text-slate-400">Clock</p>
+          <p className="mt-1 font-semibold">{snapshot.timer?.timeoutMs ? `${Math.round(snapshot.timer.timeoutMs / 1000)}s action window` : 'No action timer'}</p>
+          {snapshot.timer?.warningAt && snapshot.timer.warningAt < Date.now() ? <p className="mt-1 text-amber-300">Action warning active</p> : null}
+        </div>
       </section>
 
-      <div className="sticky bottom-0 mt-3 grid grid-cols-3 gap-2 rounded-xl bg-slate-950/95 p-2 pb-safe">
-        <button className="rounded-lg bg-slate-800 py-3 text-sm">Fold</button>
-        <button className="rounded-lg bg-slate-800 py-3 text-sm">Check</button>
-        <button className="rounded-lg bg-emerald-500 py-3 text-sm font-semibold text-black">Call</button>
+      <div className="sticky bottom-0 mt-3 rounded-2xl border border-slate-700/80 bg-slate-950/95 p-2 pb-safe backdrop-blur">
+        <div className="grid grid-cols-4 gap-2">
+          <button className="rounded-lg bg-slate-800 py-3 text-sm">Fold</button>
+          <button className="rounded-lg bg-slate-800 py-3 text-sm">Check</button>
+          <button className="rounded-lg bg-slate-800 py-3 text-sm">Bet 1/2</button>
+          <button className="rounded-lg bg-emerald-400 py-3 text-sm font-semibold text-black">Call</button>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button className="rounded-lg border border-slate-700 bg-slate-900 py-2 text-sm" onClick={() => setBuyInModalOpen(true)}>Buy-in</button>
+          <button className="rounded-lg border border-slate-700 bg-slate-900 py-2 text-sm" onClick={releaseBuyIn} disabled={!reservationId}>Release Hold</button>
+        </div>
       </div>
-
-      <button className="mt-2 w-full rounded-xl border border-slate-700 py-3 text-sm">Leave table</button>
 
       {buyInModalOpen ? (
         <div className="fixed inset-0 z-50 bg-black/60">
-          <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-slate-900 p-4 pb-safe">
-            <h3 className="text-sm font-semibold">Buy-in amount</h3>
-            <p className="mt-1 text-xs text-slate-400">Mobile-friendly bottom sheet preview.</p>
-            <input type="number" value={buyInAmount} min={1} onChange={(e) => setBuyInAmount(Number(e.target.value))} className="mt-3 w-full rounded-lg bg-slate-800 p-3" />
+          <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl border border-slate-700 bg-slate-900 p-4 pb-safe">
+            <h3 className="text-sm font-semibold">Table buy-in</h3>
+            <p className="mt-1 text-xs text-slate-400">Reserve funds before taking a seat.</p>
+            <input type="number" value={buyInAmount} min={1} onChange={(e) => setBuyInAmount(Number(e.target.value))} className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-800 p-3" />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button className="rounded-lg bg-slate-800 py-3" onClick={() => setBuyInModalOpen(false)}>Cancel</button>
-              <button className="rounded-lg bg-emerald-500 py-3 font-semibold text-black" onClick={reserveBuyIn}>Reserve Hold</button>
+              <button className="rounded-lg bg-emerald-400 py-3 font-semibold text-black" onClick={reserveBuyIn}>Reserve</button>
             </div>
           </div>
         </div>

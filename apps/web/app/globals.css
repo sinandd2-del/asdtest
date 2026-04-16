@@ -7,5 +7,21 @@
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 min-h-screen;
+  @apply min-h-screen text-slate-100;
+  background:
+    radial-gradient(1100px 700px at 10% -20%, rgba(16, 185, 129, 0.2), transparent 65%),
+    radial-gradient(900px 600px at 90% 0%, rgba(56, 189, 248, 0.12), transparent 60%),
+    linear-gradient(180deg, #020617 0%, #020617 45%, #030712 100%);
+}
+
+.glass-panel {
+  @apply rounded-2xl border border-white/10 bg-slate-900/70 shadow-[0_10px_40px_rgba(0,0,0,0.35)] backdrop-blur;
+}
+
+.hero-chip {
+  @apply inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-emerald-300;
+}
+
+.metric-card {
+  @apply rounded-xl border border-slate-700/70 bg-slate-900/80 p-3;
 }
