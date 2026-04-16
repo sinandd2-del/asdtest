@@ -257,6 +257,7 @@ model MissionTemplate {
   active                Boolean @default(true)
   expiresAt             DateTime?
   createdAt             DateTime @default(now())
+  userProgress          UserMissionProgress[]
 }
 
 model UserMissionProgress {
@@ -373,6 +374,8 @@ model Wallet {
   user             User?        @relation(fields: [userId], references: [id])
   entries          LedgerEntry[]
   depositAddresses DepositAddress[]
+  deposits         Deposit[]
+  withdrawals      Withdrawal[]
   buyInReservations BuyInReservation[]
 
   @@unique([userId, currency, layer])
