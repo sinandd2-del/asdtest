@@ -77,7 +77,7 @@ export default function LobbyPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold">{table.name}</h2>
-                  <p className="text-xs text-slate-400">{table.stakes} · {table.maxSeats}-max · {table.phase}</p>
+                  <p className="text-xs text-slate-400">{table.stakes} · {table.maxSeats}-max · {(table as { status?: string }).status ?? table.phase}</p>
                 </div>
                 <div className="rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-right">
                   <p className="text-xs text-slate-400">Pot</p>

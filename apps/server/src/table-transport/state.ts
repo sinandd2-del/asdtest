@@ -238,6 +238,19 @@ export function applyPlayerIntent(input: {
   if (runtime.state.phase === 'showdown') {
     resolveShowdown(runtime.state);
     runtime.events.push({ at: Date.now(), type: 'showdown', metadata: { winners: runtime.state.showdown?.winners ?? [] } });
+    const eligible = runtime.state.seats.filter((s) => !s.sitOut && s.stack > 0);
+    if (eligible.length >= 2) {
+      runtime.deckCards = [];
+      runtime.state = createInitialState({
+        tableId: room.tableId,
+        seats: eligible.map((s) => ({ userId: s.userId, seatNumber: s.seatNumber, stack: s.stack, connected: s.connected })),
+        smallBlind: runtime.state.smallBlind,
+        bigBlind: runtime.state.bigBlind,
+        testSeed: `${room.tableId}:${room.version}:${Date.now()}`,
+        deckOut: runtime.deckCards
+      });
+      runtime.events.push({ at: Date.now(), type: 'hand_start', metadata: { handId: runtime.state.handId } });
+    }
   }
 
   updateRoomPhase(room);

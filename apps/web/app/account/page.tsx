@@ -27,24 +27,16 @@ export default function AccountPage() {
   const [password, setPassword] = useState('StrongPass123!@#');
   const [message, setMessage] = useState('');
 
-  const sessionsQuery = useQuery({
-    queryKey: ['account-sessions'],
-    queryFn: () => apiGet<Session[]>('/api/users/sessions'),
-    enabled: !preview.enabled
-  });
+  const sessionsQuery = useQuery({ queryKey: ['account-sessions'], queryFn: () => apiGet<Session[]>('/api/users/sessions'), enabled: !preview.enabled });
   const meQuery = useQuery({ queryKey: ['account-me'], queryFn: () => apiGet<Me>('/api/users/me'), enabled: !preview.enabled });
   const vipQuery = useQuery({ queryKey: ['vip-me'], queryFn: () => apiGet<VipState>('/api/vip/me'), enabled: !preview.enabled });
   const missionQuery = useQuery({ queryKey: ['missions-daily'], queryFn: () => apiGet<MissionPayload>('/api/missions/daily'), enabled: !preview.enabled });
 
   const state = preview.enabled ? preview.state : 'logged-out';
-  const showLoggedInCard = state === 'logged-in' || state === 'sessions';
   const sessions = preview.enabled ? (state === 'sessions' ? sessionFixture : []) : sessionsQuery.data ?? [];
 
   const register = async () => {
-    if (preview.enabled) {
-      setMessage('Preview mode: registration disabled');
-      return;
-    }
+    if (preview.enabled) return setMessage('Preview mode: registration disabled');
     const csrf = await fetchCsrf();
     const response = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
@@ -52,14 +44,11 @@ export default function AccountPage() {
       headers: { 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken },
       body: JSON.stringify({ username, password, email: email || undefined })
     });
-    setMessage(response.ok ? 'Registered (email verification sent if email was provided)' : 'Registration failed');
+    setMessage(response.ok ? 'Registered successfully' : 'Registration failed');
   };
 
   const login = async () => {
-    if (preview.enabled) {
-      setMessage('Preview mode: login disabled');
-      return;
-    }
+    if (preview.enabled) return setMessage('Preview mode: login disabled');
     const csrf = await fetchCsrf();
     const response = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
@@ -77,90 +66,72 @@ export default function AccountPage() {
     }
   };
 
-  const resendVerification = async () => {
-    if (preview.enabled) return setMessage('Preview: resend email verification');
-    const csrf = await fetchCsrf();
-    const response = await fetch(`${API_BASE}/api/auth/email/verify/resend`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'content-type': 'application/json',
-        'x-csrf-token': csrf.csrfToken,
-        authorization: `Bearer ${window.localStorage.getItem('accessToken') ?? ''}`
-      }
-    });
-    setMessage(response.ok ? 'Verification email sent' : 'Failed to resend verification email');
-  };
-
-
   const claimRakeback = async () => {
     const csrf = await fetchCsrf();
-    const response = await fetch(`${API_BASE}/api/vip/claim-rakeback`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken, authorization: `Bearer ${window.localStorage.getItem('accessToken') ?? ''}` } });
+    const response = await fetch(`${API_BASE}/api/vip/claim-rakeback`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', 'x-csrf-token': csrf.csrfToken, authorization: `Bearer ${window.localStorage.getItem('accessToken') ?? ''}` }
+    });
     setMessage(response.ok ? 'Rakeback claimed' : 'Unable to claim rakeback');
   };
-  const verified = preview.enabled ? preview.state === 'verified' : Boolean(meQuery.data?.emailVerifiedAt);
 
   return (
     <MobileShell>
-      <header className="mb-3 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Account</h1>
-        {preview.enabled ? <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-xs text-emerald-300">Preview: {preview.state}</span> : null}
+      <header className="mb-4">
+        <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Player profile</p>
+        <h1 className="text-2xl font-semibold">Account & Security</h1>
       </header>
 
-      <div className="rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-        <h2 className="text-sm font-semibold">Access</h2>
-        <div className="mt-3 grid gap-2">
-          <input className="rounded-lg bg-slate-800 p-3" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
-          <input className="rounded-lg bg-slate-800 p-3" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email (optional)" />
-          <input className="rounded-lg bg-slate-800 p-3" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password" />
-          <div className="grid grid-cols-2 gap-2">
-            <button className="rounded-lg bg-slate-800 py-3" onClick={register}>Register</button>
-            <button className="rounded-lg bg-emerald-500 py-3 font-semibold text-black" onClick={login}>Login</button>
-          </div>
+      <section className="glass-panel p-4">
+        <h2 className="text-sm font-semibold">Authentication</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <input className="rounded-lg border border-slate-700 bg-slate-900 p-3" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
+          <input className="rounded-lg border border-slate-700 bg-slate-900 p-3" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email (optional)" />
+          <input className="rounded-lg border border-slate-700 bg-slate-900 p-3" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password" />
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2" onClick={register}>Register</button>
+          <button className="rounded-lg bg-emerald-400 px-4 py-2 font-semibold text-black" onClick={login}>Login</button>
         </div>
         <p className="mt-2 text-xs text-slate-400">{message}</p>
-      </div>
-
-      <section className="mt-3 rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-        <h2 className="text-sm font-semibold">Security settings</h2>
-        <p className="mt-2 text-xs text-slate-400">
-          Email status: {meQuery.data?.email ? (verified ? 'Verified ✅' : 'Unverified') : 'No email attached'}
-        </p>
-        {meQuery.data?.email && !verified ? <button className="mt-2 rounded-lg bg-slate-800 px-3 py-2 text-xs" onClick={resendVerification}>Resend verification email</button> : null}
       </section>
 
+      <section className="mt-4 grid gap-4 lg:grid-cols-3">
+        <article className="glass-panel p-4">
+          <h3 className="text-sm font-semibold">Profile</h3>
+          <p className="mt-2 text-xs text-slate-400">User: {meQuery.data?.username ?? 'guest'}</p>
+          <p className="text-xs text-slate-400">Email: {meQuery.data?.email ?? 'not set'}</p>
+        </article>
 
-      <section className="mt-3 rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-        <h2 className="text-sm font-semibold">VIP</h2>
-        <p className="mt-2 text-xs text-slate-400">Level: {vipQuery.data?.state?.currentLevel ?? 0} · Points: {vipQuery.data?.state?.points ?? '0'} · Rakeback: {vipQuery.data?.state?.rakebackBalance ?? '0'}</p>
-        <button className="mt-2 rounded-lg bg-slate-800 px-3 py-2 text-xs" onClick={claimRakeback}>Claim rakeback</button>
+        <article className="glass-panel p-4">
+          <h3 className="text-sm font-semibold">VIP & rewards</h3>
+          <p className="mt-2 text-xs text-slate-400">Level {vipQuery.data?.state?.currentLevel ?? 0} · Points {vipQuery.data?.state?.points ?? '0'}</p>
+          <p className="text-xs text-slate-400">Rakeback {vipQuery.data?.state?.rakebackBalance ?? '0'}</p>
+          <button className="mt-2 rounded bg-slate-800 px-3 py-2 text-xs" onClick={claimRakeback}>Claim rakeback</button>
+        </article>
+
+        <article className="glass-panel p-4">
+          <h3 className="text-sm font-semibold">Missions</h3>
+          <div className="mt-2 space-y-1 text-xs">
+            {(missionQuery.data?.progress ?? []).slice(0, 3).map((m) => <p key={m.id}>{m.missionTemplate.title}: {m.progress}/{m.missionTemplate.goal}</p>)}
+            {(missionQuery.data?.progress ?? []).length === 0 ? <p className="text-slate-400">No active mission progress</p> : null}
+          </div>
+        </article>
       </section>
 
-      <section className="mt-3 rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-        <h2 className="text-sm font-semibold">Daily missions</h2>
-        <div className="mt-2 grid gap-2">
-          {(missionQuery.data?.progress ?? []).slice(0, 3).map((m) => (
-            <div key={m.id} className="rounded-lg border border-slate-700 p-2 text-xs">
-              <p className="font-medium">{m.missionTemplate.title}</p>
-              <p className="text-slate-400">{m.progress}/{m.missionTemplate.goal} · {m.status}</p>
+      <section className="glass-panel mt-4 p-4">
+        <h3 className="text-sm font-semibold">Security sessions</h3>
+        <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+          {sessions.length === 0 ? <p className="text-slate-400">No active sessions shown.</p> : null}
+          {sessions.map((s) => (
+            <div key={s.id} className="rounded-lg border border-slate-700 bg-slate-950/70 p-2">
+              <p>{s.userAgent}</p>
+              <p className="text-slate-400">{s.ipAddress}</p>
             </div>
           ))}
         </div>
       </section>
-      {showLoggedInCard ? (
-        <section className="mt-3 rounded-xl bg-slate-900 p-4 ring-1 ring-slate-800">
-          <h2 className="text-sm font-semibold">Security sessions</h2>
-          <div className="mt-2 grid gap-2 text-xs">
-            {sessions.length === 0 ? <p className="text-slate-400">No active sessions shown.</p> : null}
-            {sessions.map((s) => (
-              <div key={s.id} className="rounded-lg border border-slate-700 p-2">
-                <p>{s.userAgent}</p>
-                <p className="text-slate-400">{s.ipAddress}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </MobileShell>
   );
 }

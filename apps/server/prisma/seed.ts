@@ -33,16 +33,21 @@ async function main() {
     update: {}
   });
 
-  await prisma.table.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000101' },
-    create: {
-      id: '00000000-0000-0000-0000-000000000101',
-      name: 'NL Holdem Starter',
-      stakes: '0.10/0.20',
-      maxSeats: 6
-    },
-    update: {}
-  });
+  const tableSeeds = [
+    { id: '00000000-0000-0000-0000-000000000101', name: 'Micro Rush', stakes: '0.02/0.05', maxSeats: 6 },
+    { id: '00000000-0000-0000-0000-000000000102', name: 'Low Stakes Grind', stakes: '0.10/0.20', maxSeats: 6 },
+    { id: '00000000-0000-0000-0000-000000000103', name: 'Mid Stakes Prime', stakes: '0.50/1.00', maxSeats: 6 },
+    { id: '00000000-0000-0000-0000-000000000104', name: 'High Roller Ring', stakes: '2.00/5.00', maxSeats: 6 },
+    { id: '00000000-0000-0000-0000-000000000105', name: 'Heads-Up Arena', stakes: '1.00/2.00', maxSeats: 2 }
+  ] as const;
+
+  for (const table of tableSeeds) {
+    await prisma.table.upsert({
+      where: { id: table.id },
+      create: table,
+      update: { name: table.name, stakes: table.stakes, maxSeats: table.maxSeats, status: 'OPEN' }
+    });
+  }
 
   await prisma.wallet.upsert({
     where: { type_layer_currency: { type: 'INTERNAL', layer: 'COLD_TREASURY', currency: 'USDT' } },

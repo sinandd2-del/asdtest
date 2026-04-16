@@ -13,6 +13,16 @@ pokerTablesRouter.post('/join', requireAuth, requireCsrf, async (req, res) => {
     return res.status(400).json({ error: 'Invalid payload' });
   }
 
+  const existingSeat = await prisma.tableSeat.findFirst({ where: { tableId: parsed.data.tableId, userId: req.user!.id } });
+  if (existingSeat) {
+    return res.json({ ...existingSeat, stack: existingSeat.stack.toString(), deduped: true });
+  }
+
+  const occupied = await prisma.tableSeat.findFirst({ where: { tableId: parsed.data.tableId, seatNumber: parsed.data.seat } });
+  if (occupied) {
+    return res.status(409).json({ error: 'SEAT_OCCUPIED' });
+  }
+
   const seat = await prisma.tableSeat.create({
     data: {
       tableId: parsed.data.tableId,

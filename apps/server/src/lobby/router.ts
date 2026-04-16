@@ -28,6 +28,7 @@ lobbyRouter.get('/tables', async (_req, res) => {
         id: t.id,
         name: t.name,
         stakes: t.stakes,
+        status: t.status,
         maxSeats: t.maxSeats,
         seatedCount: t.seats.length,
         pot: 0,

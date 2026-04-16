@@ -13,7 +13,9 @@ export function createInitialState(input: {
   deckOut?: Card[];
 }): HoldemTableState {
   const deck = shuffleDeck(createDeck(), testSeed);
-  const seatStates: SeatState[] = input.seats.map((s) => ({
+  const seatStates: SeatState[] = input.seats
+    .sort((a, b) => a.seatNumber - b.seatNumber)
+    .map((s) => ({
     userId: s.userId,
     seatNumber: s.seatNumber,
     stack: s.stack,
@@ -29,18 +31,103 @@ export function createInitialState(input: {
 
   input.deckOut?.push(...deck.cards);
 
+  const dealerSeat = seatStates[0]?.seatNumber;
+  const sbSeat = nextActingSeat(
+    {
+      tableId: input.tableId,
+      handId: 'seed',
+      version: 0,
+      phase: 'waiting',
+      dealerSeat,
+      actingSeat: dealerSeat,
+      smallBlind: input.smallBlind,
+      bigBlind: input.bigBlind,
+      minRaise: input.bigBlind,
+      currentBet: 0,
+      pot: 0,
+      sidePots: [],
+      board: [],
+      burn: [],
+      seats: seatStates,
+      deckRef: deck.ref,
+      actionNonce: new Set<string>(),
+      lastActionAt: Date.now(),
+      startedAt: Date.now()
+    },
+    dealerSeat
+  );
+  const bbSeat = sbSeat ? nextActingSeat(
+    {
+      tableId: input.tableId,
+      handId: 'seed',
+      version: 0,
+      phase: 'waiting',
+      dealerSeat,
+      actingSeat: sbSeat,
+      smallBlind: input.smallBlind,
+      bigBlind: input.bigBlind,
+      minRaise: input.bigBlind,
+      currentBet: 0,
+      pot: 0,
+      sidePots: [],
+      board: [],
+      burn: [],
+      seats: seatStates,
+      deckRef: deck.ref,
+      actionNonce: new Set<string>(),
+      lastActionAt: Date.now(),
+      startedAt: Date.now()
+    },
+    sbSeat
+  ) : undefined;
+
+  if (sbSeat) {
+    const sb = seatStates.find((s) => s.seatNumber === sbSeat);
+    if (sb) applyBet(sb, Math.min(input.smallBlind, sb.stack));
+  }
+  if (bbSeat) {
+    const bb = seatStates.find((s) => s.seatNumber === bbSeat);
+    if (bb) applyBet(bb, Math.min(input.bigBlind, bb.stack));
+  }
+
+  const currentBet = Math.max(...seatStates.map((s) => s.betStreet), 0);
+  const actingSeat = bbSeat ? nextActingSeat(
+    {
+      tableId: input.tableId,
+      handId: 'seed',
+      version: 0,
+      phase: 'preflop',
+      dealerSeat,
+      actingSeat: bbSeat,
+      smallBlind: input.smallBlind,
+      bigBlind: input.bigBlind,
+      minRaise: input.bigBlind,
+      currentBet,
+      pot: seatStates.reduce((sum, s) => sum + s.committed, 0),
+      sidePots: [],
+      board: [],
+      burn: [],
+      seats: seatStates,
+      deckRef: deck.ref,
+      actionNonce: new Set<string>(),
+      lastActionAt: Date.now(),
+      startedAt: Date.now()
+    },
+    bbSeat
+  ) : dealerSeat;
+
   return {
     tableId: input.tableId,
     handId: randomUUID(),
     version: 1,
-    phase: 'dealer_assignment',
-    dealerSeat: seatStates[0]?.seatNumber,
-    actingSeat: seatStates[0]?.seatNumber,
+    phase: 'preflop',
+    dealerSeat,
+    actingSeat,
     smallBlind: input.smallBlind,
     bigBlind: input.bigBlind,
     minRaise: input.bigBlind,
-    currentBet: 0,
-    pot: 0,
+    currentBet,
+    pot: seatStates.reduce((sum, s) => sum + s.committed, 0),
     sidePots: [],
     board: [],
     burn: [],
@@ -120,12 +207,6 @@ function dealBoard(state: HoldemTableState, deckCards: Card[], count: number) {
 
 function toNextPhase(state: HoldemTableState, deckCards: Card[]) {
   switch (state.phase) {
-    case 'dealer_assignment':
-      state.phase = 'blind_posting';
-      return;
-    case 'blind_posting':
-      state.phase = 'preflop';
-      return;
     case 'preflop':
       state.phase = 'flop';
       dealBoard(state, deckCards, 3);
@@ -212,8 +293,11 @@ export function applyIntent(state: HoldemTableState, intent: PlayerIntent, deckC
   } else if (streetDone(state)) {
     toNextPhase(state, deckCards);
   }
-
-  state.actingSeat = nextActingSeat(state, seat.seatNumber);
+  if (state.phase === 'flop' || state.phase === 'turn' || state.phase === 'river') {
+    state.actingSeat = nextActingSeat(state, state.dealerSeat);
+  } else {
+    state.actingSeat = nextActingSeat(state, seat.seatNumber);
+  }
 }
 
 export function resolveShowdown(state: HoldemTableState) {
@@ -238,6 +322,21 @@ export function resolveShowdown(state: HoldemTableState) {
   }
 
   state.showdown = { winners: payouts, reveal };
+  for (const payout of payouts) {
+    const seat = state.seats.find((s) => s.userId === payout.userId);
+    if (seat) {
+      seat.stack += payout.amount;
+    }
+  }
+  for (const seat of state.seats) {
+    seat.committed = 0;
+    seat.betStreet = 0;
+    seat.inHand = !seat.sitOut && seat.stack > 0;
+    seat.folded = false;
+    seat.allIn = false;
+  }
+  state.pot = 0;
+  state.sidePots = [];
   state.phase = 'hand_complete';
   state.version += 1;
 

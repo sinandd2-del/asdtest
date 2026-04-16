@@ -110,6 +110,33 @@ adminRouter.get('/tables/live', async (_req, res) => {
   res.json(tables);
 });
 
+adminRouter.post('/tables', requireCsrf, async (req, res) => {
+  const { name, stakes, maxSeats = 6 } = req.body as { name: string; stakes: string; maxSeats?: number };
+  const created = await prisma.table.create({
+    data: {
+      name,
+      stakes,
+      maxSeats: Math.max(2, Math.min(9, Number(maxSeats) || 6)),
+      status: 'OPEN'
+    }
+  });
+  res.status(201).json(created);
+});
+
+adminRouter.patch('/tables/:tableId', requireCsrf, async (req, res) => {
+  const { name, stakes, maxSeats, status } = req.body as { name?: string; stakes?: string; maxSeats?: number; status?: 'OPEN' | 'RUNNING' | 'CLOSED' };
+  const updated = await prisma.table.update({
+    where: { id: req.params.tableId },
+    data: {
+      ...(name ? { name } : {}),
+      ...(stakes ? { stakes } : {}),
+      ...(typeof maxSeats === 'number' ? { maxSeats: Math.max(2, Math.min(9, Number(maxSeats))) } : {}),
+      ...(status ? { status } : {})
+    }
+  });
+  res.json(updated);
+});
+
 adminRouter.get('/tables/stuck-holds', async (_req, res) => {
   const stuck = await listStuckReservations();
   res.json(stuck);
