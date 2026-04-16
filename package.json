@@ -1,0 +1,17 @@
+{
+  "name": "poker-platform-mvp",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @poker/contracts && npm run build -w @poker/signer && npm run build -w @poker/web && npm run build -w @poker/server",
+    "dev": "concurrently \"npm run dev -w @poker/signer\" \"npm run dev -w @poker/server\" \"npm run dev -w @poker/web\"",
+    "lint": "npm run lint -w @poker/web && npm run lint -w @poker/server",
+    "test": "npm run test -w @poker/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

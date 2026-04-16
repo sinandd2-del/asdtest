@@ -1,0 +1,677 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLAYER
+  ADMIN
+  SUPPORT
+  TREASURY
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  SUSPENDED
+}
+
+enum TableStatus {
+  OPEN
+  RUNNING
+  CLOSED
+}
+
+enum WalletType {
+  PLAYER
+  INTERNAL
+}
+
+enum WalletLayer {
+  PLAYER
+  COLD_TREASURY
+  STANDBY_REFILL
+  HOT_PAYOUT
+}
+
+enum DepositAddressStatus {
+  ACTIVE
+  INACTIVE
+  DEPRECATED
+}
+
+enum DepositStatus {
+  CREATED
+  PENDING_CHAIN
+  SEEN
+  CONFIRMING
+  CONFIRMED
+  CREDITED
+  FAILED
+  REVERSED
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  HELD
+  PENDING_APPROVAL
+  APPROVED
+  SIGNING
+  SIGNED
+  BROADCASTED
+  CONFIRMING
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum SigningStatus {
+  PENDING
+  APPROVED
+  SIGNED
+  FAILED
+}
+
+enum LedgerTxType {
+  DEPOSIT
+  WITHDRAWAL
+  HOLD
+  RELEASE
+  TREASURY_REFILL
+  TREASURY_SWEEP
+  ADMIN_ADJUSTMENT
+  POKER_BUYIN
+  POKER_PAYOUT
+  RAKE
+  TOURNAMENT_BUYIN
+  TOURNAMENT_FEE
+  TOURNAMENT_PAYOUT
+  VIP_RAKEBACK
+  MISSION_REWARD
+  BONUS_REWARD
+  TOURNAMENT_TICKET
+}
+
+
+enum TablePhase {
+  WAITING
+  PREFLOP
+  FLOP
+  TURN
+  RIVER
+  SHOWDOWN
+}
+
+enum PresenceRole {
+  PLAYER
+  SPECTATOR
+}
+
+
+
+enum TournamentType {
+  MTT
+  SIT_AND_GO
+}
+
+enum TournamentStatus {
+  SCHEDULED
+  REGISTRATION_OPEN
+  RUNNING
+  LATE_REG_OPEN
+  FINISHED
+  CANCELLED
+}
+
+enum TournamentRegistrationStatus {
+  REGISTERED
+  ELIMINATED
+  PAID
+  CANCELLED
+}
+
+enum MissionType {
+  DAILY_LOGIN
+  PLAY_HANDS
+  STREAK
+}
+
+enum MissionStatus {
+  ACTIVE
+  CLAIMED
+  EXPIRED
+}
+
+model Tournament {
+  id                    String @id @default(uuid())
+  name                  String
+  type                  TournamentType
+  status                TournamentStatus @default(SCHEDULED)
+  gameType              String @default("NLHE")
+  buyIn                 Decimal @db.Decimal(30, 8)
+  fee                   Decimal @db.Decimal(30, 8)
+  currency              String @default("USDT")
+  startsAt              DateTime
+  lateRegEndsAt         DateTime?
+  startsInSeconds       Int @default(0)
+  blindLevelSeconds     Int @default(300)
+  maxPlayers            Int @default(1000)
+  prizePool             Decimal @default(0) @db.Decimal(30, 8)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  registrations         TournamentRegistration[]
+  levels                TournamentBlindLevel[]
+  payoutLadder          TournamentPayoutLadder[]
+  assignments           TournamentTableAssignment[]
+
+  @@index([status, startsAt])
+}
+
+model TournamentRegistration {
+  id                    String @id @default(uuid())
+  tournamentId          String
+  userId                String
+  status                TournamentRegistrationStatus @default(REGISTERED)
+  eliminationRank       Int?
+  payoutAmount          Decimal? @db.Decimal(30, 8)
+  registeredAt          DateTime @default(now())
+  tournament            Tournament @relation(fields: [tournamentId], references: [id])
+  user                  User @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, status])
+}
+
+model TournamentBlindLevel {
+  id                    String @id @default(uuid())
+  tournamentId          String
+  level                 Int
+  smallBlind            Decimal @db.Decimal(30, 8)
+  bigBlind              Decimal @db.Decimal(30, 8)
+  ante                  Decimal @default(0) @db.Decimal(30, 8)
+  startsAtOffsetSec     Int
+  tournament            Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([tournamentId, level])
+}
+
+model TournamentPayoutLadder {
+  id                    String @id @default(uuid())
+  tournamentId          String
+  placeFrom             Int
+  placeTo               Int
+  payoutPercent         Decimal @db.Decimal(8, 4)
+  tournament            Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@index([tournamentId, placeFrom, placeTo])
+}
+
+model TournamentTableAssignment {
+  id                    String @id @default(uuid())
+  tournamentId          String
+  tableId               String
+  userId                String
+  seatNumber            Int
+  createdAt             DateTime @default(now())
+  tournament            Tournament @relation(fields: [tournamentId], references: [id])
+  table                 Table @relation(fields: [tableId], references: [id])
+  user                  User @relation(fields: [userId], references: [id])
+
+  @@index([tournamentId, tableId])
+}
+
+model VIPRule {
+  id                    String @id @default(uuid())
+  level                 Int @unique
+  label                 String
+  rakebackBps           Int
+  pointsPerUsdRake      Decimal @db.Decimal(10, 4)
+  active                Boolean @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model UserVIPState {
+  id                    String @id @default(uuid())
+  userId                String @unique
+  currentLevel          Int @default(0)
+  points                Decimal @default(0) @db.Decimal(30, 8)
+  rakeContributed       Decimal @default(0) @db.Decimal(30, 8)
+  rakebackBalance       Decimal @default(0) @db.Decimal(30, 8)
+  updatedAt             DateTime @updatedAt
+  user                  User @relation(fields: [userId], references: [id])
+}
+
+model MissionTemplate {
+  id                    String @id @default(uuid())
+  title                 String
+  description           String
+  missionType           MissionType
+  goal                  Int
+  rewardAmount          Decimal @db.Decimal(30, 8)
+  currency              String @default("USDT")
+  active                Boolean @default(true)
+  expiresAt             DateTime?
+  createdAt             DateTime @default(now())
+  userProgress          UserMissionProgress[]
+}
+
+model UserMissionProgress {
+  id                    String @id @default(uuid())
+  missionTemplateId     String
+  userId                String
+  progress              Int @default(0)
+  streakCount           Int @default(0)
+  status                MissionStatus @default(ACTIVE)
+  availableUntil        DateTime?
+  claimedAt             DateTime?
+  missionTemplate       MissionTemplate @relation(fields: [missionTemplateId], references: [id])
+  user                  User @relation(fields: [userId], references: [id])
+
+  @@unique([missionTemplateId, userId])
+}
+
+model PromoCampaign {
+  id                    String @id @default(uuid())
+  title                 String
+  body                  String
+  bannerImageUrl        String?
+  bonusCode             String?
+  active                Boolean @default(true)
+  startsAt              DateTime @default(now())
+  endsAt                DateTime?
+  createdAt             DateTime @default(now())
+}
+
+model UserRewardWallet {
+  id                    String @id @default(uuid())
+  userId                String @unique
+  bonusBalance          Decimal @default(0) @db.Decimal(30, 8)
+  ticketCount           Int @default(0)
+  updatedAt             DateTime @updatedAt
+  user                  User @relation(fields: [userId], references: [id])
+}
+model User {
+  id                    String               @id @default(uuid())
+  username              String               @unique
+  email                 String?              @unique
+  emailVerifiedAt       DateTime?
+  passwordHash          String
+  displayName           String
+  role                  Role                 @default(PLAYER)
+  status                AccountStatus        @default(ACTIVE)
+  avatarUrl             String?
+  privacyEmailOptIn     Boolean              @default(false)
+  enhancedReviewEnabled Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  sessions              Session[]
+  wallets               Wallet[]
+  auditLogs             AuditLog[]
+  devices               Device[]
+  playerSeats           TableSeat[]
+  ledgerEntries         LedgerEntry[]
+  passwordResetTokens   PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  depositAddresses      DepositAddress[]
+  deposits              Deposit[]
+  withdrawals           Withdrawal[]
+  withdrawalAddresses   WithdrawalAddress[]
+  riskFlags             RiskFlag[]
+  tablePresences        TablePresence[]
+  buyInReservations     BuyInReservation[]
+  tournamentRegistrations TournamentRegistration[]
+  tournamentAssignments  TournamentTableAssignment[]
+  vipState               UserVIPState?
+  missionProgress        UserMissionProgress[]
+  rewardWallet           UserRewardWallet?
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  ipAddress        String
+  userAgent        String
+  fingerprint      String?
+  suspicious       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  revokedAt        DateTime?
+  user             User     @relation(fields: [userId], references: [id])
+}
+
+model Device {
+  id            String   @id @default(uuid())
+  userId        String
+  fingerprint   String
+  label         String?
+  ipAddress     String?
+  lastSeenAt    DateTime @default(now())
+  suspicious    Boolean  @default(false)
+  anomalyScore  Int      @default(0)
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, fingerprint])
+}
+
+model Wallet {
+  id               String       @id @default(uuid())
+  userId           String?
+  type             WalletType
+  layer            WalletLayer
+  currency         String
+  availableBalance Decimal      @default(0) @db.Decimal(30, 8)
+  heldBalance      Decimal      @default(0) @db.Decimal(30, 8)
+  pendingBalance   Decimal      @default(0) @db.Decimal(30, 8)
+  frozen           Boolean      @default(false)
+  flags            Json
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  user             User?        @relation(fields: [userId], references: [id])
+  entries          LedgerEntry[]
+  depositAddresses DepositAddress[]
+  deposits         Deposit[]
+  withdrawals      Withdrawal[]
+  buyInReservations BuyInReservation[]
+
+  @@unique([userId, currency, layer])
+  @@unique([type, layer, currency])
+  @@index([type, layer, currency])
+}
+
+model LedgerEntry {
+  id                String       @id @default(uuid())
+  userId            String?
+  walletId          String
+  txType            LedgerTxType
+  amount            Decimal      @db.Decimal(30, 8)
+  deltaAvailable    Decimal      @db.Decimal(30, 8)
+  deltaHeld         Decimal      @db.Decimal(30, 8)
+  deltaPending      Decimal      @db.Decimal(30, 8)
+  idempotencyKey    String
+  immutableRef      String       @unique
+  blockchainTxHash  String?
+  blockchainNetwork String?
+  reference         String
+  metadata          Json
+  createdAt         DateTime     @default(now())
+  user              User?        @relation(fields: [userId], references: [id])
+  wallet            Wallet       @relation(fields: [walletId], references: [id])
+
+  @@unique([walletId, idempotencyKey])
+  @@index([blockchainTxHash, blockchainNetwork])
+}
+
+model Table {
+  id                 String             @id @default(uuid())
+  name               String
+  stakes             String
+  maxSeats           Int                @default(9)
+  status             TableStatus        @default(OPEN)
+  phase              TablePhase         @default(WAITING)
+  snapshotVersion    Int                @default(0)
+  reconnectTokenSeed String             @default(uuid())
+  createdAt          DateTime           @default(now())
+  seats              TableSeat[]
+  presences          TablePresence[]
+  reservations       BuyInReservation[]
+  tournamentAssignments TournamentTableAssignment[]
+}
+
+model TableSeat {
+  id         String  @id @default(uuid())
+  tableId    String
+  userId     String
+  seatNumber Int
+  stack      Decimal @default(0) @db.Decimal(30, 8)
+  table      Table   @relation(fields: [tableId], references: [id])
+  user       User    @relation(fields: [userId], references: [id])
+
+  @@unique([tableId, seatNumber])
+}
+
+model DepositAddress {
+  id            String               @id @default(uuid())
+  userId         String
+  walletId       String
+  asset          String
+  network        String
+  address        String
+  explorerBaseUrl String?
+  status         DepositAddressStatus @default(ACTIVE)
+  assignedAt     DateTime             @default(now())
+  deprecatedAt   DateTime?
+  metadata       Json
+  user           User                 @relation(fields: [userId], references: [id])
+  wallet         Wallet               @relation(fields: [walletId], references: [id])
+  deposits       Deposit[]
+
+  @@unique([network, address])
+  @@index([userId, asset, network])
+}
+
+model Deposit {
+  id               String        @id @default(uuid())
+  userId            String
+  walletId          String
+  depositAddressId  String
+  asset             String
+  network           String
+  amount            Decimal       @db.Decimal(30, 8)
+  txHash            String
+  confirmations     Int           @default(0)
+  requiredConfirms  Int           @default(3)
+  status            DepositStatus @default(CREATED)
+  creditedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  user              User          @relation(fields: [userId], references: [id])
+  wallet            Wallet        @relation(fields: [walletId], references: [id])
+  depositAddress    DepositAddress @relation(fields: [depositAddressId], references: [id])
+  events            DepositEvent[]
+
+  @@unique([network, txHash, depositAddressId])
+  @@index([status, network])
+}
+
+model DepositEvent {
+  id             String   @id @default(uuid())
+  depositId      String
+  externalEventId String
+  blockNumber    Int?
+  confirmations  Int      @default(0)
+  rawPayload     Json
+  createdAt      DateTime @default(now())
+  deposit        Deposit  @relation(fields: [depositId], references: [id])
+
+  @@unique([depositId, externalEventId])
+}
+
+model WithdrawalAddress {
+  id         String   @id @default(uuid())
+  userId      String
+  asset       String
+  network     String
+  address     String
+  nickname    String?
+  whitelisted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, network, address])
+}
+
+model Withdrawal {
+  id                    String           @id @default(uuid())
+  userId                 String
+  walletId               String
+  asset                  String
+  network                String
+  toAddress              String
+  amount                 Decimal          @db.Decimal(30, 8)
+  estimatedFee           Decimal          @db.Decimal(30, 8)
+  status                 WithdrawalStatus @default(REQUESTED)
+  holdLedgerEntryId      String?
+  blockchainTxHash       String?
+  cooldownEndsAt         DateTime
+  riskScore              Int              @default(0)
+  riskFlags              Json
+  idempotencyKey         String
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  completedAt            DateTime?
+  user                   User             @relation(fields: [userId], references: [id])
+  wallet                 Wallet           @relation(fields: [walletId], references: [id])
+  signingRequests        SigningRequest[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([status, network])
+}
+
+model SigningRequest {
+  id               String        @id @default(uuid())
+  withdrawalId     String
+  signingProvider  String
+  requestPayload   Json
+  signedPayload    Json?
+  status           SigningStatus @default(PENDING)
+  requestedAt      DateTime      @default(now())
+  signedAt         DateTime?
+  failureReason    String?
+  withdrawal       Withdrawal    @relation(fields: [withdrawalId], references: [id])
+}
+
+model InternalWalletPolicy {
+  id                 String   @id @default(uuid())
+  currency           String
+  hotMaxBalance      Decimal  @db.Decimal(30, 8)
+  hotMinBalance      Decimal  @db.Decimal(30, 8)
+  standbyMinBalance  Decimal  @db.Decimal(30, 8)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([currency])
+}
+
+
+model EmailVerificationToken {
+  id         String   @id @default(uuid())
+  userId     String
+  tokenHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  userId     String
+  tokenHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+}
+
+
+model TablePresence {
+  id             String       @id @default(uuid())
+  tableId        String
+  userId         String
+  sessionId      String
+  seatNumber     Int?
+  role           PresenceRole @default(PLAYER)
+  connected      Boolean      @default(true)
+  lastHeartbeatAt DateTime    @default(now())
+  joinedAt       DateTime     @default(now())
+  table          Table        @relation(fields: [tableId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([tableId, userId, sessionId])
+  @@index([tableId, connected])
+}
+
+model BuyInReservation {
+  id              String   @id @default(uuid())
+  tableId         String
+  userId          String
+  walletId        String
+  seatNumber      Int
+  amount          Decimal  @db.Decimal(30, 8)
+  holdLedgerRef   String
+  status          String
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+  releasedAt      DateTime?
+  table           Table    @relation(fields: [tableId], references: [id])
+  user            User     @relation(fields: [userId], references: [id])
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+
+  @@unique([tableId, userId, seatNumber, status])
+  @@index([tableId, status, expiresAt])
+}
+
+model RiskFlag {
+  id         String   @id @default(uuid())
+  userId     String
+  type       String
+  severity   String
+  context    Json
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, resolved])
+}
+
+
+model RakeRuleConfig {
+  id                String   @id @default(uuid())
+  version           Int      @unique
+  gameType          String
+  stakeMin          Decimal  @db.Decimal(30, 8)
+  stakeMax          Decimal  @db.Decimal(30, 8)
+  blindMin          Decimal  @db.Decimal(30, 8)
+  blindMax          Decimal  @db.Decimal(30, 8)
+  headsUpOnly       Boolean  @default(false)
+  minTableSize      Int
+  maxTableSize      Int
+  noFlopNoDrop      Boolean  @default(true)
+  rakeBps           Int
+  maxCap            Decimal  @db.Decimal(30, 8)
+  currency          String
+  vipDiscountBps    Int      @default(0)
+  effectiveFrom     DateTime
+  active            Boolean  @default(true)
+  createdByUserId   String?
+  lastChangedByUserId String?
+  lastAuditLogId    String?
+  metadata          Json?
+  deactivatedAt     DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([active, effectiveFrom])
+  @@index([gameType, currency, headsUpOnly])
+  @@index([stakeMin, stakeMax, blindMin, blindMax])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  actor     String
+  action    String
+  ipAddress String
+  metadata  Json
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+}
