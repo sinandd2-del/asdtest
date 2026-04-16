@@ -1,0 +1,86 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: poker
+      POSTGRES_PASSWORD: poker
+      POSTGRES_DB: pokerdb
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U poker -d pokerdb']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  signer:
+    build:
+      context: .
+      dockerfile: infra/signer.Dockerfile
+    ports:
+      - '4500:4500'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4500/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: infra/server.Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://poker:poker@postgres:5432/pokerdb
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: http://localhost:3000
+      SIGNER_BASE_URL: http://signer:4500
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      signer:
+        condition: service_healthy
+    ports:
+      - '4000:4000'
+    command: sh -c "npm run prisma:generate -w @poker/server && npm run prisma:push -w @poker/server && npm run prisma:seed -w @poker/server && npm run start -w @poker/server"
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/web.Dockerfile
+    env_file: .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres_data:
